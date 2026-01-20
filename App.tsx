@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import LandingPage from './pages/LandingPage';
 import CoursePage from './pages/CoursePage';
+import CatalogPage from './pages/CatalogPage';
 import CheckoutPage from './pages/CheckoutPage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -12,6 +12,7 @@ import { AppView } from './types';
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.LANDING);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
 
   // Simple scroll to top on view change
   useEffect(() => {
@@ -27,8 +28,20 @@ const App: React.FC = () => {
     switch (currentView) {
       case AppView.LANDING:
         return <LandingPage setView={setCurrentView} />;
+      case AppView.CATALOG:
+        return (
+          <CatalogPage
+            setView={setCurrentView}
+            setSelectedCourseId={setSelectedCourseId}
+          />
+        );
       case AppView.COURSE:
-        return <CoursePage setView={setCurrentView} />;
+        return (
+          <CoursePage
+            setView={setCurrentView}
+            courseId={selectedCourseId}
+          />
+        );
       case AppView.CHECKOUT:
         return <CheckoutPage setView={setCurrentView} />;
       case AppView.LOGIN:
@@ -43,9 +56,9 @@ const App: React.FC = () => {
   };
 
   return (
-    <Layout 
-      currentView={currentView} 
-      setView={setCurrentView} 
+    <Layout
+      currentView={currentView}
+      setView={setCurrentView}
       isLoggedIn={isLoggedIn}
     >
       {renderView()}

@@ -1,68 +1,86 @@
-
 import React, { useState } from 'react';
 import { AppView } from '../types';
-import { PlayCircle, ChevronDown, ChevronUp, Lock, CheckCircle2, Star, Users, Layout, FileText, Download } from 'lucide-react';
+import { PlayCircle, ChevronDown, ChevronUp, Lock, CheckCircle2, Star, Users, Layout, FileText, Download, ArrowLeft } from 'lucide-react';
+import { courses } from '../data/mockData';
 
 interface CoursePageProps {
   setView: (view: AppView) => void;
+  courseId: string | null;
 }
 
-const CoursePage: React.FC<CoursePageProps> = ({ setView }) => {
+const CoursePage: React.FC<CoursePageProps> = ({ setView, courseId }) => {
   const [openModule, setOpenModule] = useState<number | null>(1);
 
+  // Find the selected course, fallback to the first one if not found
+  const course = courses.find(c => c.id === courseId) || courses[0];
+  const discountPercentage = Math.round(((course.originalPrice - course.price) / course.originalPrice) * 100);
+
+  // Mock modules data (could be moved to mockData later)
   const modules = [
     {
       id: 1,
-      title: "Módulo 1: Fundamentos Sólidos",
+      title: "Módulo 1: Fundamentos",
       lessons: ["Bienvenida y Setup", "La Interfaz: Cintas y Barras", "Navegación Inteligente", "Formateo Esencial"]
     },
     {
       id: 2,
-      title: "Módulo 2: Tu Primera Tabla Inteligente",
+      title: "Módulo 2: Herramientas Principales",
       lessons: ["Crear Tablas Reales", "Filtros y Segmentadores", "Ordenamiento Lógico", "Diseño de Reportes"]
     },
     {
       id: 3,
-      title: "Módulo 3: Fórmulas que Salvan Vidas",
-      lessons: ["Lógica de Fórmulas", "Operaciones Automáticas", "Funciones SUMA y PROMEDIO", "Referencias que no Fallan"]
+      title: "Módulo 3: Práctica Real",
+      lessons: ["Lógica de Fórmulas", "Operaciones Automáticas", "Funciones SUMA y PROMEDIO", "Proyecto Final"]
     }
   ];
 
   return (
     <div className="animate-in slide-in-from-bottom-8 duration-700 max-w-7xl mx-auto py-8">
+      {/* Back Button */}
+      <button
+        onClick={() => setView(AppView.CATALOG)}
+        className="mb-8 flex items-center gap-2 text-gray-400 hover:text-white transition-colors group"
+      >
+        <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+        <span>Volver al Catálogo</span>
+      </button>
+
       {/* Header del Curso */}
       <div className="mb-12 space-y-4">
         <div className="flex items-center gap-2 text-green-500 text-sm font-bold">
-           <Layout size={16} />
-           <span>CURSO PARA PRINCIPIANTES</span>
+          <Layout size={16} />
+          <span className="uppercase">{course.level}</span>
         </div>
-        <h1 className="text-4xl md:text-5xl font-black">Dominando Excel: De 0 a Profesional</h1>
+        <h1 className="text-4xl md:text-5xl font-black">{course.title}</h1>
         <div className="flex flex-wrap gap-6 text-sm text-gray-400">
           <div className="flex items-center gap-2">
             <Star size={16} className="text-yellow-500 fill-yellow-500" />
-            <span className="text-white font-bold">4.9</span> (2.4k alumnos)
+            <span className="text-white font-bold">{course.rating}</span> ({course.students} alumnos)
           </div>
           <div className="flex items-center gap-2">
             <Users size={16} />
-            <span>Actualizado hace 2 días</span>
+            <span>Actualizado {course.lastUpdated}</span>
           </div>
           <div className="flex items-center gap-2">
             <FileText size={16} />
-            <span>12 Recursos descargables</span>
+            <span>{course.features.length} Recursos incluídos</span>
           </div>
         </div>
+        <p className="text-xl text-gray-300 max-w-3xl leading-relaxed mt-4">
+          {course.description}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         {/* Lado Izquierdo: Contenido y Syllabus */}
         <div className="lg:col-span-2 space-y-10">
-          
+
           {/* Video Player Style Container */}
           <div className="group relative aspect-video rounded-[2.5rem] overflow-hidden glass border-white/10 shadow-2xl">
-            <img 
-              src="https://images.unsplash.com/photo-1543286386-713bcd534a71?auto=format&fit=crop&q=80&w=1200" 
-              className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" 
-              alt="Course Preview" 
+            <img
+              src={course.image}
+              className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700"
+              alt={course.title}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
             <div className="absolute inset-0 flex items-center justify-center">
@@ -73,7 +91,7 @@ const CoursePage: React.FC<CoursePageProps> = ({ setView }) => {
             <div className="absolute bottom-8 left-8 right-8 flex justify-between items-center">
               <span className="text-sm font-bold bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10">Clase 1: Introducción Gratuita</span>
               <div className="flex gap-2">
-                 <button className="p-3 glass rounded-xl hover:bg-white/10 transition-colors"><Download size={18} /></button>
+                <button className="p-3 glass rounded-xl hover:bg-white/10 transition-colors"><Download size={18} /></button>
               </div>
             </div>
           </div>
@@ -82,13 +100,13 @@ const CoursePage: React.FC<CoursePageProps> = ({ setView }) => {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-black">¿Qué vas a aprender?</h2>
-              <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">3 Módulos • 12 Lecciones</span>
+              <span className="text-xs text-gray-500 font-bold uppercase tracking-widest">3 Módulos • {modules.reduce((acc, mod) => acc + mod.lessons.length, 0)} Lecciones</span>
             </div>
-            
+
             <div className="space-y-4">
               {modules.map((mod) => (
                 <div key={mod.id} className="glass rounded-3xl border-white/5 overflow-hidden transition-all hover:border-white/10">
-                  <button 
+                  <button
                     onClick={() => setOpenModule(openModule === mod.id ? null : mod.id)}
                     className="w-full px-8 py-6 flex items-center justify-between group"
                   >
@@ -128,35 +146,29 @@ const CoursePage: React.FC<CoursePageProps> = ({ setView }) => {
           <div className="sticky top-28 space-y-6">
             <div className="glass p-10 rounded-[3rem] border-white/10 relative overflow-hidden group shadow-2xl">
               <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 blur-[60px] rounded-full group-hover:scale-150 transition-transform duration-700"></div>
-              
+
               <div className="space-y-6 relative z-10 text-center">
                 <div className="space-y-1">
-                   <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Precio de Lanzamiento</p>
-                   <div className="flex items-center justify-center gap-3">
-                      <span className="text-5xl font-black">$29</span>
-                      <div className="text-left">
-                         <p className="text-xs text-gray-500 line-through">USD $89</p>
-                         <p className="text-xs text-green-500 font-bold">Ahorra 67%</p>
-                      </div>
-                   </div>
+                  <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Precio de Lanzamiento</p>
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="text-5xl font-black">${course.price}</span>
+                    <div className="text-left">
+                      <p className="text-xs text-gray-500 line-through">USD ${course.originalPrice}</p>
+                      <p className="text-xs text-green-500 font-bold">Ahorra {discountPercentage}%</p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-4 pt-4 border-t border-white/5">
-                   <div className="flex items-center gap-3 text-sm text-gray-300 font-medium">
+                  {course.benefits.slice(0, 3).map((benefit, i) => (
+                    <div key={i} className="flex items-center gap-3 text-sm text-gray-300 font-medium">
                       <CheckCircle2 size={18} className="text-green-500" />
-                      <span>Acceso de por vida</span>
-                   </div>
-                   <div className="flex items-center gap-3 text-sm text-gray-300 font-medium">
-                      <CheckCircle2 size={18} className="text-green-500" />
-                      <span>Soporte 24/7 de expertos</span>
-                   </div>
-                   <div className="flex items-center gap-3 text-sm text-gray-300 font-medium">
-                      <CheckCircle2 size={18} className="text-green-500" />
-                      <span>Certificado oficial</span>
-                   </div>
+                      <span>{benefit}</span>
+                    </div>
+                  ))}
                 </div>
 
-                <button 
+                <button
                   onClick={() => setView(AppView.CHECKOUT)}
                   className="w-full py-5 bg-green-500 text-black font-black rounded-[2rem] hover:scale-105 active:scale-95 transition-all duration-300 neon-glow text-lg uppercase tracking-wider"
                 >
@@ -168,11 +180,11 @@ const CoursePage: React.FC<CoursePageProps> = ({ setView }) => {
 
             {/* Testimonial Pequeño */}
             <div className="glass p-6 rounded-3xl border-white/5 flex items-center gap-4">
-               <img src="https://i.pravatar.cc/100?u=ju" className="w-12 h-12 rounded-full border border-green-500/30" alt="Alumna" />
-               <div>
-                  <p className="text-xs italic text-gray-400">"El curso de Fundamentos cambió mi forma de trabajar. Ahora soy el referente en mi oficina."</p>
-                  <p className="text-[10px] font-bold text-white mt-1">— Julia M.</p>
-               </div>
+              <img src="https://i.pravatar.cc/100?u=ju" className="w-12 h-12 rounded-full border border-green-500/30" alt="Alumna" />
+              <div>
+                <p className="text-xs italic text-gray-400">"El curso de {course.title.split(":")[0]} cambió mi forma de trabajar."</p>
+                <p className="text-[10px] font-bold text-white mt-1">— Estudiante Verificad@</p>
+              </div>
             </div>
           </div>
         </div>

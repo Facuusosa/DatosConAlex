@@ -1,7 +1,7 @@
-
 export enum AppView {
   LANDING = 'landing',
   COURSE = 'course',
+  CATALOG = 'catalog',
   CHECKOUT = 'checkout',
   LOGIN = 'login',
   DASHBOARD = 'dashboard',
@@ -17,8 +17,17 @@ export interface User {
 export interface Course {
   id: string;
   title: string;
-  progress: number;
+  description: string;
+  shortDescription: string;
+  price: number;
+  originalPrice: number;
   image: string;
   instructor: string;
   duration: string;
+  rating: number;
+  students: number;
+  lastUpdated: string;
+  level: 'Principiante' | 'Intermedio' | 'Avanzado';
+  benefits: string[];
+  features: string[];
 }
