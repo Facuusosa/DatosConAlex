@@ -16,6 +16,10 @@ urlpatterns = [
     # Valida un pago exitoso usando los parámetros de MP
     path('validate/', views.pago_exitoso, name='pago_exitoso'),
     
+    # GET /api/payments/download/<order_id>/
+    # Descarga el archivo del curso (solo si pago aprobado)
+    path('download/<int:order_id>/', views.download_file, name='download_file'),
+    
     # POST /api/payments/webhook/
     # Recibe notificaciones de Mercado Pago
     path('webhook/', views.webhook, name='webhook'),

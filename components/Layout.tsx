@@ -1,17 +1,14 @@
-
 import React from 'react';
 import { AppView } from '../types';
-import { LayoutGrid, BookOpen, Map, Info, User as UserIcon, Bell, Search, LogIn } from 'lucide-react';
 import LetterGlitch from './LetterGlitch';
 
 interface LayoutProps {
   children: React.ReactNode;
   currentView: AppView;
   setView: (view: AppView) => void;
-  isLoggedIn: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, isLoggedIn }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentView, setView }) => {
   return (
     <div className="min-h-screen flex flex-col relative">
       {/* Letter Glitch Background - Balance visual */}
@@ -45,35 +42,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, setView, isLogge
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-300">
           <button onClick={() => setView(AppView.LANDING)} className={`hover:text-green-400 transition-colors ${currentView === AppView.LANDING ? 'text-green-400' : ''}`}>Inicio</button>
           <button onClick={() => setView(AppView.CATALOG)} className={`hover:text-green-400 transition-colors ${currentView === AppView.CATALOG ? 'text-green-400' : ''}`}>Cursos</button>
-          <button onClick={() => setView(AppView.ABOUT)} className={`hover:text-green-400 transition-colors ${currentView === AppView.ABOUT ? 'text-green-400' : ''}`}>Sobre Nosotros</button>
         </div>
 
-        <div className="flex items-center gap-4">
-          {isLoggedIn ? (
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex bg-white/5 p-1.5 rounded-xl border border-white/10 items-center gap-2">
-                <Search size={16} className="text-gray-400 ml-2" />
-                <input type="text" placeholder="Buscar..." className="bg-transparent border-none outline-none text-sm w-32 focus:w-48 transition-all" />
-              </div>
-              <button className="relative p-2 hover:bg-white/5 rounded-full transition-colors">
-                <Bell size={20} />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full border-2 border-black"></span>
-              </button>
-              <div className="flex items-center gap-3 cursor-pointer p-1 pr-3 hover:bg-white/5 rounded-full transition-colors" onClick={() => setView(AppView.DASHBOARD)}>
-                <img src="https://picsum.photos/seed/alex/100/100" className="w-8 h-8 rounded-full border border-green-500" alt="Avatar" />
-                <span className="text-sm font-medium hidden lg:block">Alex Reed</span>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setView(AppView.LOGIN)}
-              className="px-5 py-2 bg-green-600/20 text-green-400 border border-green-500/50 rounded-xl text-sm font-semibold hover:bg-green-600/30 transition-all flex items-center gap-2 neon-glow"
-            >
-              <LogIn size={16} />
-              Iniciar Sesión
-            </button>
-          )}
-        </div>
+        {/* Espacio vacío para mantener el logo centrado visualmente */}
+        <div className="w-8" />
       </nav>
 
       <main className="flex-1 pt-24 px-4 sm:px-8 max-w-7xl mx-auto w-full pb-12">

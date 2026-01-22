@@ -3,6 +3,10 @@ export enum AppView {
   COURSE = 'course',
   CATALOG = 'catalog',
   CHECKOUT = 'checkout',
+  PAYMENT_SUCCESS = 'payment-success',
+  PAYMENT_FAILED = 'payment-failed',
+  PAYMENT_PENDING = 'payment-pending',
+  // Legacy views (kept for type compatibility)
   LOGIN = 'login',
   DASHBOARD = 'dashboard',
   ABOUT = 'about'

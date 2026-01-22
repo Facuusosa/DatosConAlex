@@ -50,8 +50,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# No usamos base de datos por ahora (stateless)
-DATABASES = {}
+# Base de datos SQLite para Orders
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
 
 # Internationalization
 LANGUAGE_CODE = 'es-ar'

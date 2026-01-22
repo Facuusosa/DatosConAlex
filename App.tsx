@@ -4,25 +4,44 @@ import LandingPage from './pages/LandingPage';
 import CoursePage from './pages/CoursePage';
 import CatalogPage from './pages/CatalogPage';
 import CheckoutPage from './pages/CheckoutPage';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import AboutPage from './pages/AboutPage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
+import PaymentFailedPage from './pages/PaymentFailedPage';
+import PaymentPendingPage from './pages/PaymentPendingPage';
 import { AppView } from './types';
+
+/**
+ * ============================================================================
+ * AIExcel - App Principal (Simplificado)
+ * ============================================================================
+ * 
+ * Versión simplificada sin Login ni About Us.
+ * Flujo principal: Landing -> Catalog -> Course -> Checkout -> Mercado Pago
+ *                  -> PaymentSuccess/Failed/Pending
+ * 
+ * ============================================================================
+ */
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.LANDING);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
 
-  // Simple scroll to top on view change
+  // Check URL for payment return pages on mount
+  useEffect(() => {
+    const path = window.location.pathname;
+
+    if (path === '/pago-exitoso') {
+      setCurrentView(AppView.PAYMENT_SUCCESS);
+    } else if (path === '/pago-fallido') {
+      setCurrentView(AppView.PAYMENT_FAILED);
+    } else if (path === '/pago-pendiente') {
+      setCurrentView(AppView.PAYMENT_PENDING);
+    }
+  }, []);
+
+  // Scroll to top on view change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentView]);
-
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-    setCurrentView(AppView.DASHBOARD);
-  };
 
   const renderView = () => {
     switch (currentView) {
@@ -44,12 +63,12 @@ const App: React.FC = () => {
         );
       case AppView.CHECKOUT:
         return <CheckoutPage setView={setCurrentView} />;
-      case AppView.LOGIN:
-        return <LoginPage onLogin={handleLogin} setView={setCurrentView} />;
-      case AppView.DASHBOARD:
-        return <DashboardPage setView={setCurrentView} />;
-      case AppView.ABOUT:
-        return <AboutPage setView={setCurrentView} />;
+      case AppView.PAYMENT_SUCCESS:
+        return <PaymentSuccessPage setView={setCurrentView} />;
+      case AppView.PAYMENT_FAILED:
+        return <PaymentFailedPage setView={setCurrentView} />;
+      case AppView.PAYMENT_PENDING:
+        return <PaymentPendingPage setView={setCurrentView} />;
       default:
         return <LandingPage setView={setCurrentView} />;
     }
@@ -59,7 +78,6 @@ const App: React.FC = () => {
     <Layout
       currentView={currentView}
       setView={setCurrentView}
-      isLoggedIn={isLoggedIn}
     >
       {renderView()}
     </Layout>
