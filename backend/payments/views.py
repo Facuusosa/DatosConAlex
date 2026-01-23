@@ -18,7 +18,11 @@ from django.views.decorators.http import require_http_methods
 import mercadopago
 from dotenv import load_dotenv
 
+import logging
 from .models import Order
+from .services import send_product_email
+
+logger = logging.getLogger(__name__)
 
 # Cargar variables de entorno desde el directorio backend
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -157,7 +161,6 @@ def create_preference(request):
                 "failure": f"{FRONTEND_URL}/pago-fallido",
                 "pending": f"{FRONTEND_URL}/pago-pendiente",
             },
-            "auto_return": "approved",
             # IMPORTANTE: external_reference = order.id para vincular
             "external_reference": str(order.id),
             "statement_descriptor": "ALEXCEL",
@@ -217,66 +220,73 @@ def create_preference(request):
 @require_http_methods(["GET"])
 def pago_exitoso(request):
     """
-    Valida un pago exitoso y sirve el archivo del curso si está aprobado.
-    
-    FLUJO:
-    1. Recibe external_reference (order.id) de Mercado Pago
-    2. Consulta el pago en MP para verificar estado
-    3. Actualiza la Order en la base de datos
-    4. Solo sirve el archivo si status = 'approved'
-    
-    Query Parameters (enviados por MP al redirigir):
-    - payment_id / collection_id: ID del pago
-    - external_reference: ID de nuestra Order
-    - status: Estado del pago
-    
-    Response (JSON con info o archivo descargable):
+    Valida un pago exitoso y solicita el envío del producto por mail.
     """
     try:
         # Obtener parámetros de la URL
         payment_id = request.GET.get('payment_id') or request.GET.get('collection_id')
         external_reference = request.GET.get('external_reference')
-        status_param = request.GET.get('status') or request.GET.get('collection_status')
         
-        if not payment_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'No se recibió el ID del pago'
-            }, status=400)
+        if not payment_id or not external_reference:
+            return JsonResponse({'success': False, 'error': 'Faltan parámetros'}, status=400)
         
-        if not external_reference:
-            return JsonResponse({
-                'success': False,
-                'error': 'No se recibió la referencia de la orden'
-            }, status=400)
-        
-        # ========================================
-        # PASO 1: Buscar la Order en la BD
-        # ========================================
+        # 1. Recuperar la Orden
         try:
-            order = Order.objects.get(id=int(external_reference))
-        except Order.DoesNotExist:
+            # Asegurarse que es un int para evitar inyecciones raras
+            order_id = int(external_reference)
+            order = Order.objects.get(id=order_id)
+        except (Order.DoesNotExist, ValueError):
+            return JsonResponse({'success': False, 'error': 'Orden no válida'}, status=404)
+            
+        # 2. Verificar estado real con Mercado Pago
+        try:
+            payment_response = sdk.payment().get(payment_id)
+            if payment_response["status"] != 200:
+                logger.error(f"Error consultando MP: {payment_response}")
+                return JsonResponse({'success': False, 'error': 'Error consultando MP'}, status=502)
+                
+            remote_payment = payment_response.get("response", {})
+            real_status = remote_payment.get("status")
+            status_detail = remote_payment.get("status_detail")
+            
+        except Exception as e:
+            logger.error(f"Excepción conectando con MP: {e}")
+            return JsonResponse({'success': False, 'error': 'Error de conexión con MP'}, status=502)
+
+        # 3. Procesar si está aprobado
+        if real_status == 'approved':
+            # Actualizar orden
+            order.status = 'approved'
+            order.payment_id = payment_id
+            order.save()
+            
+            # ------------------------------------------------------------------
+            # ENVÍO DE EMAIL CON PRODUCTO (CORE REQUIREMENT)
+            # ------------------------------------------------------------------
+            email_sent = send_product_email(order)
+            
+            return JsonResponse({
+                'success': True,
+                'status': 'approved',
+                'payment_id': payment_id,
+                'email_sent': email_sent,
+                'order_id': order.id,
+                'message': 'Pago aprobado. El email con la descarga ha sido enviado.'
+            })
+            
+        else:
+            # Pago no aprobado (in_process, rejected, etc)
+            logger.warning(f"Pago {payment_id} no aprobado. Estado: {real_status}")
             return JsonResponse({
                 'success': False,
-                'error': 'Orden no encontrada'
-            }, status=404)
-        except ValueError:
-            return JsonResponse({
-                'success': False,
-                'error': 'Referencia de orden inválida'
-            }, status=400)
-        
-        # ========================================
-        # PASO 2: Verificar pago con Mercado Pago API
-        # ========================================
-        payment_response = sdk.payment().get(payment_id)
-        payment_info = payment_response.get("response", {})
-        
-        if not payment_info:
-            return JsonResponse({
-                'success': False,
-                'error': 'No se pudo verificar el pago con Mercado Pago'
-            }, status=500)
+                'status': real_status,
+                'status_detail': status_detail,
+                'message': 'El pago no se encuentra aprobado.'
+            })
+
+    except Exception as e:
+        logger.exception("Error no manejado en pago_exitoso")
+        return JsonResponse({'success': False, 'error': f'Error interno: {str(e)}'}, status=500)
         
         payment_status = payment_info.get('status')
         payment_status_detail = payment_info.get('status_detail')
