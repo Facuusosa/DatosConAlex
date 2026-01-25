@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import LandingPage from './pages/LandingPage';
-import CoursePage from './pages/CoursePage';
-import CatalogPage from './pages/CatalogPage';
+import PlanillasPage from './pages/PlanillasPage';
+import PlanillaDetailPage from './pages/PlanillaDetailPage';
+import OfertasPage from './pages/OfertasPage';
+import CursosPage from './pages/CursosPage';
 import CheckoutPage from './pages/CheckoutPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentFailedPage from './pages/PaymentFailedPage';
@@ -11,19 +13,21 @@ import { AppView } from './types';
 
 /**
  * ============================================================================
- * AIExcel - App Principal (Simplificado)
+ * Datos con Alex - App Principal
  * ============================================================================
  * 
- * Versión simplificada sin Login ni About Us.
- * Flujo principal: Landing -> Catalog -> Course -> Checkout -> Mercado Pago
- *                  -> PaymentSuccess/Failed/Pending
+ * Plataforma de venta de planillas Excel premium.
+ * Flujo: Landing -> Planillas/Ofertas -> Detalle -> Checkout -> Mercado Pago
+ *        -> PaymentSuccess/Failed/Pending
  * 
  * ============================================================================
  */
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.LANDING);
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedPlanillaId, setSelectedPlanillaId] = useState<string | null>(null);
+  const [checkoutPlanillaId, setCheckoutPlanillaId] = useState<string | null>(null);
+  const [checkoutOfertaId, setCheckoutOfertaId] = useState<string | null>(null);
 
   // Check URL for payment return pages on mount
   useEffect(() => {
@@ -47,28 +51,53 @@ const App: React.FC = () => {
     switch (currentView) {
       case AppView.LANDING:
         return <LandingPage setView={setCurrentView} />;
-      case AppView.CATALOG:
+
+      case AppView.PLANILLAS:
         return (
-          <CatalogPage
+          <PlanillasPage
             setView={setCurrentView}
-            setSelectedCourseId={setSelectedCourseId}
+            setSelectedPlanillaId={setSelectedPlanillaId}
           />
         );
-      case AppView.COURSE:
+
+      case AppView.PLANILLA_DETAIL:
         return (
-          <CoursePage
+          <PlanillaDetailPage
             setView={setCurrentView}
-            courseId={selectedCourseId}
+            planillaId={selectedPlanillaId}
+            setCheckoutPlanillaId={setCheckoutPlanillaId}
           />
         );
+
+      case AppView.OFERTAS:
+        return (
+          <OfertasPage
+            setView={setCurrentView}
+            setCheckoutOfertaId={setCheckoutOfertaId}
+          />
+        );
+
+      case AppView.CURSOS:
+        return <CursosPage setView={setCurrentView} />;
+
       case AppView.CHECKOUT:
-        return <CheckoutPage setView={setCurrentView} />;
+        return (
+          <CheckoutPage
+            setView={setCurrentView}
+            planillaId={checkoutPlanillaId}
+            ofertaId={checkoutOfertaId}
+          />
+        );
+
       case AppView.PAYMENT_SUCCESS:
         return <PaymentSuccessPage setView={setCurrentView} />;
+
       case AppView.PAYMENT_FAILED:
         return <PaymentFailedPage setView={setCurrentView} />;
+
       case AppView.PAYMENT_PENDING:
         return <PaymentPendingPage setView={setCurrentView} />;
+
       default:
         return <LandingPage setView={setCurrentView} />;
     }

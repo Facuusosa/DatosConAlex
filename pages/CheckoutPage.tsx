@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AppView } from '../types';
+import { getPlanillaById, getOfertaById } from '../data/planillas';
 import { ShieldCheck, ChevronLeft, CheckCircle, CreditCard, User, Mail, Loader2, FileText } from 'lucide-react';
 
 /**
@@ -8,7 +9,7 @@ import { ShieldCheck, ChevronLeft, CheckCircle, CreditCard, User, Mail, Loader2,
  * ============================================================================
  * 
  * Flujo seguro de pago con registro de usuario en base de datos.
- * Campos: Nombre, Apellido, DNI/CUIT, Email
+ * Soporta compra de planillas individuales y ofertas/packs.
  * 
  * ============================================================================
  */
@@ -17,9 +18,11 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 interface CheckoutPageProps {
   setView: (view: AppView) => void;
+  planillaId?: string | null;
+  ofertaId?: string | null;
 }
 
-const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
+const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView, planillaId, ofertaId }) => {
   // Form state
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -30,14 +33,50 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Datos del curso
-  const courseData = {
-    id: 'excel-principiantes',
-    title: 'Excel para Principiantes',
-    originalPrice: 49.00,
-    finalPrice: 24.50,
-    discount: 50,
-  };
+  // Determinar qué producto se está comprando
+  const productData = useMemo(() => {
+    if (ofertaId) {
+      const oferta = getOfertaById(ofertaId);
+      if (oferta) {
+        return {
+          id: oferta.id,
+          title: oferta.title,
+          description: oferta.description,
+          originalPrice: oferta.originalPrice,
+          finalPrice: oferta.price,
+          discount: oferta.savings,
+          type: 'oferta' as const,
+        };
+      }
+    }
+
+    if (planillaId) {
+      const planilla = getPlanillaById(planillaId);
+      if (planilla) {
+        const discount = Math.round((1 - planilla.price / planilla.originalPrice) * 100);
+        return {
+          id: planilla.id,
+          title: planilla.title,
+          description: planilla.shortDescription,
+          originalPrice: planilla.originalPrice,
+          finalPrice: planilla.price,
+          discount,
+          type: 'planilla' as const,
+        };
+      }
+    }
+
+    // Fallback
+    return {
+      id: 'tracker-habitos',
+      title: 'Tracker de Hábitos',
+      description: 'Planilla Excel Premium',
+      originalPrice: 15,
+      finalPrice: 1,
+      discount: 93,
+      type: 'planilla' as const,
+    };
+  }, [planillaId, ofertaId]);
 
   // Validación del formulario
   const isFormValid = () => {
@@ -53,7 +92,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
 
   // Formatear DNI mientras escribe
   const handleDocumentChange = (value: string) => {
-    // Solo permitir números y puntos
     const cleaned = value.replace(/[^\d.]/g, '');
     setDocument(cleaned);
   };
@@ -79,9 +117,9 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
           last_name: lastName.trim(),
           document: document.trim(),
           email: email.trim(),
-          course_id: courseData.id,
-          title: courseData.title,
-          price: courseData.finalPrice,
+          course_id: productData.id,
+          title: productData.title,
+          price: productData.finalPrice,
           quantity: 1,
         }),
       });
@@ -89,7 +127,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
       const data = await response.json();
 
       if (data.success && (data.init_point || data.sandbox_init_point)) {
-        // Redirigir a Mercado Pago
         const redirectUrl = data.sandbox_init_point || data.init_point;
         window.location.href = redirectUrl;
       } else {
@@ -103,14 +140,24 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
     }
   };
 
+  const handleGoBack = () => {
+    if (ofertaId) {
+      setView(AppView.OFERTAS);
+    } else if (planillaId) {
+      setView(AppView.PLANILLA_DETAIL);
+    } else {
+      setView(AppView.PLANILLAS);
+    }
+  };
+
   return (
     <div className="animate-in zoom-in duration-500 max-w-5xl mx-auto py-12">
       <button
-        onClick={() => setView(AppView.COURSE)}
+        onClick={handleGoBack}
         className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-8 group"
       >
         <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-        Volver al curso
+        Volver
       </button>
 
       <h1 className="text-4xl font-extrabold mb-12">Finalizar Compra</h1>
@@ -128,13 +175,12 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
             </h2>
 
             <p className="text-sm text-gray-400">
-              Ingresá tus datos para recibir el acceso al curso.
+              Ingresá tus datos para recibir el archivo.
             </p>
 
             <div className="space-y-5">
               {/* Row: Nombre + Apellido */}
               <div className="grid grid-cols-2 gap-4">
-                {/* Nombre */}
                 <div className="space-y-2">
                   <label htmlFor="firstName" className="block text-sm font-medium text-gray-300">
                     Nombre
@@ -153,7 +199,6 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
                   />
                 </div>
 
-                {/* Apellido */}
                 <div className="space-y-2">
                   <label htmlFor="lastName" className="block text-sm font-medium text-gray-300">
                     Apellido
@@ -264,18 +309,18 @@ const CheckoutPage: React.FC<CheckoutPageProps> = ({ setView }) => {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="font-semibold">{courseData.title}</p>
-                  <p className="text-xs text-gray-500">Acceso Completo + Certificado</p>
+                  <p className="font-semibold">{productData.title}</p>
+                  <p className="text-xs text-gray-500">{productData.description}</p>
                 </div>
-                <span className="font-bold text-gray-400 line-through">${courseData.originalPrice.toFixed(2)}</span>
+                <span className="font-bold text-gray-400 line-through">${productData.originalPrice.toFixed(2)}</span>
               </div>
               <div className="flex justify-between items-center text-green-500">
-                <p className="font-medium">Descuento Especial ({courseData.discount}%)</p>
-                <span className="font-bold">-${(courseData.originalPrice - courseData.finalPrice).toFixed(2)}</span>
+                <p className="font-medium">Descuento Especial ({productData.discount}%)</p>
+                <span className="font-bold">-${(productData.originalPrice - productData.finalPrice).toFixed(2)}</span>
               </div>
               <div className="pt-4 border-t border-white/10 flex justify-between items-center">
                 <span className="text-lg font-bold">Total a pagar:</span>
-                <span className="text-3xl font-black text-green-500 neon-text">${courseData.finalPrice.toFixed(2)}</span>
+                <span className="text-3xl font-black text-green-500 neon-text">${productData.finalPrice.toFixed(2)}</span>
               </div>
             </div>
           </div>

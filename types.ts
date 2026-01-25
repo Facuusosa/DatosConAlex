@@ -1,21 +1,36 @@
 export enum AppView {
   LANDING = 'landing',
-  COURSE = 'course',
-  CATALOG = 'catalog',
+  PLANILLAS = 'planillas',
+  PLANILLA_DETAIL = 'planilla-detail',
+  CURSOS = 'cursos',
+  OFERTAS = 'ofertas',
   CHECKOUT = 'checkout',
   PAYMENT_SUCCESS = 'payment-success',
   PAYMENT_FAILED = 'payment-failed',
   PAYMENT_PENDING = 'payment-pending',
-  // Legacy views (kept for type compatibility)
-  LOGIN = 'login',
-  DASHBOARD = 'dashboard',
-  ABOUT = 'about'
 }
 
-export interface User {
-  name: string;
-  avatar: string;
-  enrolledCourses: number;
+export interface Planilla {
+  id: string;
+  title: string;
+  description: string;
+  shortDescription: string;
+  price: number;
+  originalPrice: number;
+  image: string;
+  features: string[];
+  color: 'green' | 'purple' | 'blue';
+}
+
+export interface Oferta {
+  id: string;
+  title: string;
+  description: string;
+  planillas: string[]; // IDs of included planillas
+  price: number;
+  originalPrice: number;
+  savings: number;
+  image: string;
 }
 
 export interface Course {

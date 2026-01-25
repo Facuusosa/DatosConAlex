@@ -25,5 +25,19 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "*.tsx",
+    "*.ts",
+    "components/**/*",
+    "pages/**/*",
+    "data/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "backend",
+    "dist",
+    ".agent",
+    ".gemini"
+  ]
 }
