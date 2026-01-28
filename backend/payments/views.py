@@ -86,7 +86,8 @@ def create_preference(request):
                 "failure": f"{FRONTEND_URL}/pago-fallido",
                 "pending": f"{FRONTEND_URL}/pago-pendiente",
             },
-            "auto_return": "approved",
+            # auto_return solo funciona con URLs públicas (no localhost)
+            **({"auto_return": "approved"} if "localhost" not in FRONTEND_URL else {}),
             "external_reference": str(temp_order_id),
             "statement_descriptor": "ALEXCEL",
             "payer": {
@@ -111,9 +112,14 @@ def create_preference(request):
         preference_response = sdk.preference().create(preference_data)
         preference = preference_response.get("response", {})
         
+        # Log detallado para debug
+        logger.info(f"MP Response Status: {preference_response.get('status')}")
+        logger.info(f"MP Response: {preference_response}")
+        
         if "id" not in preference:
-            logger.error(f"MP Error: {preference_response}")
-            return JsonResponse({'success': False, 'error': 'Error MP'}, status=500)
+            error_msg = preference_response.get("response", {}).get("message", "Error desconocido")
+            logger.error(f"MP Error Full: {preference_response}")
+            return JsonResponse({'success': False, 'error': f'Error MP: {error_msg}'}, status=500)
             
         return JsonResponse({
             'success': True,
