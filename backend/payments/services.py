@@ -36,13 +36,11 @@ def send_product_email(order: Order) -> bool:
     try:
         # 1. Definir Ruta del Archivo según el producto comprado
         file_path = get_product_file_path(order.course_id)
+        file_exists = os.path.exists(file_path)
         
-        # Fallback: si no existe el archivo, crea uno demo
-        if not os.path.exists(file_path):
-            logger.warning(f"[EMAIL] Archivo no encontrado: {file_path}. Creando demo.")
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, 'w') as f:
-                f.write(f"Archivo de prueba para: {order.course_title}")
+        # En Railway el filesystem es read-only, no intentamos crear archivos
+        if not file_exists:
+            logger.warning(f"[EMAIL] Archivo no encontrado: {file_path}")
         
         # 2. Template del Email - Marca "Datos con Alex"
         subject = f"🎉 Tu compra: {order.course_title} - Datos con Alex"
@@ -173,12 +171,12 @@ def send_product_email(order: Order) -> bool:
         )
         email.content_subtype = "html"
         
-        # 4. Adjuntar Archivo
-        if os.path.exists(file_path):
+        # 4. Adjuntar Archivo (si existe)
+        if file_exists:
             email.attach_file(file_path)
             logger.info(f"[EMAIL] Archivo adjuntado: {file_path}")
         else:
-            logger.warning(f"[EMAIL] No se pudo adjuntar archivo: {file_path}")
+            logger.warning(f"[EMAIL] Enviando sin archivo adjunto - archivo no existe: {file_path}")
         
         # 5. Enviar
         email.send()
