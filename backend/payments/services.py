@@ -1,8 +1,8 @@
 import os
 import logging
-from django.core.mail import EmailMessage
 from django.conf import settings
 from .models import Order
+import resend
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,7 @@ def get_product_file_path(product_id: str) -> str:
 
 def send_product_email(order: Order) -> bool:
     """
-    Envía el email automatizado con el producto adjunto usando RESEND.
-    Cumple con el estándar 'Complete Artifact' de entrega de producto.
+    Envía el email automatizado con el producto adjunto usando RESEND SDK.
     
     Args:
         order (Order): Orden aprobada con datos del cliente.
@@ -33,26 +32,22 @@ def send_product_email(order: Order) -> bool:
     Returns:
         bool: True si el envío fue exitoso.
     """
-    import resend
-    
     try:
-        # Configurar API Key (debe estar en variables de entorno)
-        resend_key = os.getenv("RESEND_API_KEY")
-        if not resend_key:
-            logger.error("[EMAIL ERROR] Falta RESEND_API_KEY")
+        # Configurar API Key
+        resend.api_key = os.getenv("RESEND_API_KEY")
+        if not resend.api_key:
+            logger.error("Falta RESEND_API_KEY en variables de entorno")
             return False
-
-        resend.api_key = resend_key
-        
-        # 1. Definir Ruta del Archivo según el producto comprado
+            
+        # 1. Definir Ruta del Archivo
         file_path = get_product_file_path(order.course_id)
         file_exists = os.path.exists(file_path)
         
-        # En Railway el filesystem es read-only, no intentamos crear archivos
+        # En Railway el filesystem es read-only, no intentamos crear archivos si no existen
         if not file_exists:
             logger.warning(f"[EMAIL] Archivo no encontrado: {file_path}")
         
-        # 2. Template del Email - Marca "Datos con Alex"
+        # 2. Template del Email
         subject = f"🎉 Tu compra: {order.course_title} - Datos con Alex"
         
         html_content = f"""
@@ -61,144 +56,59 @@ def send_product_email(order: Order) -> bool:
         <head>
             <meta charset="UTF-8">
             <style>
-                body {{ 
-                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                    line-height: 1.6; 
-                    color: #333; 
-                    background-color: #f4f4f4; 
-                    padding: 20px; 
-                    margin: 0;
-                }}
-                .email-container {{ 
-                    max-width: 600px; 
-                    margin: 0 auto; 
-                    background: #ffffff; 
-                    padding: 40px; 
-                    border-radius: 16px; 
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.1); 
-                }}
-                .header {{ 
-                    text-align: center;
-                    border-bottom: 3px solid #22c55e; 
-                    padding-bottom: 24px; 
-                    margin-bottom: 24px; 
-                }}
-                .logo {{ 
-                    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-                    color: white;
-                    font-weight: bold;
-                    padding: 12px 24px;
-                    border-radius: 12px;
-                    display: inline-block;
-                    font-size: 18px;
-                    margin-bottom: 16px;
-                }}
-                .header h1 {{ 
-                    margin: 0; 
-                    color: #111; 
-                    font-size: 28px;
-                    font-weight: 600;
-                }}
-                .content {{ 
-                    font-size: 16px; 
-                    color: #555; 
-                }}
-                .content p {{
-                    margin: 16px 0;
-                }}
-                .highlight {{ 
-                    color: #22c55e; 
-                    font-weight: bold; 
-                }}
-                .order-box {{
-                    background: #f8f9fa;
-                    border-radius: 12px;
-                    padding: 20px;
-                    margin: 24px 0;
-                }}
-                .order-box p {{
-                    margin: 8px 0;
-                }}
-                .footer {{ 
-                    margin-top: 32px; 
-                    padding-top: 24px; 
-                    border-top: 1px solid #eee; 
-                    font-size: 13px; 
-                    color: #999; 
-                    text-align: center; 
-                    font-style: italic;
-                }}
-                .social-links {{
-                    margin-top: 16px;
-                }}
-                .social-links a {{
-                    color: #22c55e;
-                    text-decoration: none;
-                    margin: 0 8px;
-                }}
+                body {{ font-family: sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ text-align: center; border-bottom: 3px solid #22c55e; padding-bottom: 20px; }}
+                .content {{ padding: 20px 0; }}
             </style>
         </head>
         <body>
-            <div class="email-container">
+            <div class="container">
                 <div class="header">
-                    <div class="logo">DA</div>
-                    <h1>Datos con Alex</h1>
+                    <h1>¡Gracias por tu compra!</h1>
                 </div>
                 <div class="content">
-                    <p>¡Hola <strong>{order.first_name}</strong>! 👋</p>
-                    
-                    <p>¡Gracias por tu compra! Tu pago ha sido <span class="highlight">confirmado</span>.</p>
-                    
-                    <div class="order-box">
-                        <p><strong>📦 Pedido:</strong> #{order.id}</p>
-                        <p><strong>📊 Producto:</strong> {order.course_title}</p>
-                        <p><strong>💰 Total:</strong> ${order.price}</p>
-                    </div>
-                    
-                    <p>Adjunto a este correo encontrarás tu archivo: <span class="highlight">{order.course_title}</span></p>
-                    
-                    <p>¡Esperamos que te sea de mucha utilidad! Si tenés alguna duda, no dudes en contactarnos.</p>
-                    
-                    <p>¡Éxitos! 🚀</p>
-                </div>
-                <div class="footer">
-                    <p>Este es un mensaje automático de Datos con Alex.</p>
-                    <p style="font-size: 11px; color: #aaa;">Enviado vía Resend para asegurar la entrega.</p>
-                    <div class="social-links">
-                        <a href="https://www.tiktok.com/@datos.conalex">TikTok</a> | 
-                        <a href="https://www.instagram.com/datos_conalex">Instagram</a>
-                    </div>
+                    <p>Hola <strong>{order.first_name}</strong>,</p>
+                    <p>Tu pago por <strong>{order.course_title}</strong> ha sido confirmado.</p>
+                    <p>Adjunto a este correo encontrarás el archivo para descargar.</p>
+                    <p>Si tienes alguna duda, responde a este correo.</p>
                 </div>
             </div>
         </body>
         </html>
         """
         
-        # 3. Preparar adjuntos para Resend
+        # 3. Preparar adjuntos
         attachments = []
         if file_exists:
-            attachments.append({
-                "filename": os.path.basename(file_path),
-                "path": file_path
-            })
-            logger.info(f"[EMAIL] Archivo adjuntado: {file_path}")
-        else:
-            logger.warning(f"[EMAIL] Enviando sin archivo adjunto - archivo no existe: {file_path}")
-            
+            try:
+                with open(file_path, "rb") as f:
+                    # Convertir bytes a lista de enteros para Resend
+                    attachment_content = list(f.read())
+                
+                attachments.append({
+                    "filename": os.path.basename(file_path),
+                    "content": attachment_content
+                })
+                logger.info(f"[EMAIL] Archivo leído para adjuntar: {file_path}")
+            except Exception as e:
+                logger.error(f"[EMAIL] Error leyendo archivo: {e}")
+        
         # 4. Enviar con Resend
-        r = resend.Emails.send({
+        # IMPORTANTE: free tier solo envía desde onboarding@resend.dev
+        params = {
             "from": "Datos con Alex <onboarding@resend.dev>",
             "to": [order.email],
             "subject": subject,
             "html": html_content,
-            "reply_to": "datos.conalex@gmail.com",
+            "reply_to": "datos.conalex@gmail.com", # Tu email real
             "attachments": attachments
-        })
+        }
         
-        logger.info(f"[EMAIL SUCCESS] Resend Response: {r}")
+        r = resend.Emails.send(params)
+        logger.info(f"[EMAIL SUCCESS] Resend ID: {r.get('id')}")
         return True
-        
+
     except Exception as e:
-        # CRITICAL: Log error but do NOT crash application logic
-        logger.error(f"[EMAIL CRITICAL FAILURE] No se pudo enviar email a {order.email}: {str(e)}")
+        logger.error(f"[EMAIL ERROR] Fallo al enviar con Resend: {str(e)}")
         return False
