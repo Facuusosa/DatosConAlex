@@ -26,4 +26,5 @@ urlpatterns = [
     path('webhook/', views.webhook, name='webhook'),
     path('health/', views_debug.health_check),
     path('env-check/', views_debug.env_check),
+    path('test-email/', views_debug.test_email),
 ]
