@@ -24,7 +24,7 @@ def get_product_file_path(product_id: str) -> str:
 
 def send_product_email(order: Order) -> bool:
     """
-    Envía el email automatizado con el producto adjunto.
+    Envía el email automatizado con el producto adjunto usando RESEND.
     Cumple con el estándar 'Complete Artifact' de entrega de producto.
     
     Args:
@@ -33,7 +33,17 @@ def send_product_email(order: Order) -> bool:
     Returns:
         bool: True si el envío fue exitoso.
     """
+    import resend
+    
     try:
+        # Configurar API Key (debe estar en variables de entorno)
+        resend_key = os.getenv("RESEND_API_KEY")
+        if not resend_key:
+            logger.error("[EMAIL ERROR] Falta RESEND_API_KEY")
+            return False
+
+        resend.api_key = resend_key
+        
         # 1. Definir Ruta del Archivo según el producto comprado
         file_path = get_product_file_path(order.course_id)
         file_exists = os.path.exists(file_path)
@@ -116,6 +126,7 @@ def send_product_email(order: Order) -> bool:
                     font-size: 13px; 
                     color: #999; 
                     text-align: center; 
+                    font-style: italic;
                 }}
                 .social-links {{
                     margin-top: 16px;
@@ -152,6 +163,7 @@ def send_product_email(order: Order) -> bool:
                 </div>
                 <div class="footer">
                     <p>Este es un mensaje automático de Datos con Alex.</p>
+                    <p style="font-size: 11px; color: #aaa;">Enviado vía Resend para asegurar la entrega.</p>
                     <div class="social-links">
                         <a href="https://www.tiktok.com/@datos.conalex">TikTok</a> | 
                         <a href="https://www.instagram.com/datos_conalex">Instagram</a>
@@ -162,26 +174,28 @@ def send_product_email(order: Order) -> bool:
         </html>
         """
         
-        # 3. Configurar Mensaje
-        email = EmailMessage(
-            subject=subject,
-            body=html_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[order.email],
-        )
-        email.content_subtype = "html"
-        
-        # 4. Adjuntar Archivo (si existe)
+        # 3. Preparar adjuntos para Resend
+        attachments = []
         if file_exists:
-            email.attach_file(file_path)
+            attachments.append({
+                "filename": os.path.basename(file_path),
+                "path": file_path
+            })
             logger.info(f"[EMAIL] Archivo adjuntado: {file_path}")
         else:
             logger.warning(f"[EMAIL] Enviando sin archivo adjunto - archivo no existe: {file_path}")
+            
+        # 4. Enviar con Resend
+        r = resend.Emails.send({
+            "from": "Datos con Alex <onboarding@resend.dev>",
+            "to": [order.email],
+            "subject": subject,
+            "html": html_content,
+            "reply_to": "datos.conalex@gmail.com",
+            "attachments": attachments
+        })
         
-        # 5. Enviar
-        email.send()
-        
-        logger.info(f"[EMAIL SUCCESS] Producto enviado a {order.email} (Orden #{order.id})")
+        logger.info(f"[EMAIL SUCCESS] Resend Response: {r}")
         return True
         
     except Exception as e:
