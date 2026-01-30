@@ -14,7 +14,8 @@ import { ShieldCheck, ChevronLeft, CheckCircle, CreditCard, User, Mail, Loader2,
  * ============================================================================
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// TEMPORAL: URL hardcodeada para producción (la variable de entorno no funciona bien en Vercel)
+const API_URL = 'https://alexcel-backend-production.up.railway.app';
 
 interface CheckoutPageProps {
   setView: (view: AppView) => void;

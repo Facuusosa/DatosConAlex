@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { AppView } from '../types';
 import { CheckCircle, Download, Mail, ArrowRight, Sparkles, Loader2, AlertCircle } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// TEMPORAL: URL hardcodeada para producción
+const API_URL = 'https://alexcel-backend-production.up.railway.app';
 
 interface PaymentSuccessPageProps {
     setView: (view: AppView) => void;
