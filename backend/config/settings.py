@@ -19,8 +19,11 @@ DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 # Hosts permitidos - incluye Railway
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-# Railway usa dominios .railway.app
-ALLOWED_HOSTS += ['.railway.app', '.up.railway.app']
+if DEBUG:
+    ALLOWED_HOSTS = ['*']
+else:
+    # Railway usa dominios .railway.app
+    ALLOWED_HOSTS += ['.railway.app', '.up.railway.app']
 
 # Application definition
 INSTALLED_APPS = [
@@ -74,28 +77,11 @@ STATIC_URL = 'static/'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ==============================================================================
-# CORS Configuration - Permite conexiones desde Vercel
-# ==============================================================================
-CORS_ALLOWED_ORIGINS = [
-    # Local development
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    # Producción Vercel
-    "https://datos-con-alex.vercel.app",
-    "https://alexcel-three.vercel.app",
-    "https://alexcel.vercel.app",
-]
+# CORS Configuration - Permisivo para evitar errores de conexión
+CORS_ALLOW_ALL_ORIGINS = True
 
-# Permitir cualquier subdominio de vercel para previews
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://.*\.vercel\.app$",
-]
+# CORS_ALLOWED_ORIGINS desactivado temporalmente para máxima compatibilidad
+# CORS_ALLOWED_ORIGINS = [ ... ]
 
 CORS_ALLOW_CREDENTIALS = True
 

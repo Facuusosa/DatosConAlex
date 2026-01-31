@@ -23,7 +23,7 @@ import { ShieldCheck, ChevronLeft, CheckCircle, CreditCard, User, Mail, Loader2,
 const API_URL = import.meta.env.VITE_API_URL ||
   (import.meta.env.PROD
     ? 'https://alexcel-backend-production.up.railway.app'  // PRODUCCIÓN
-    : 'http://localhost:8000');  // DESARROLLO LOCAL
+    : `http://${window.location.hostname}:8000`);  // DESARROLLO LOCAL (Dinámico para LAN)
 
 interface CheckoutPageProps {
   setView: (view: AppView) => void;
