@@ -20,10 +20,10 @@ import { ShieldCheck, ChevronLeft, CheckCircle, CreditCard, User, Mail, Loader2,
 // API URL dinámico según el entorno
 // En producción (Vercel), VITE_API_URL debería estar configurado
 // En desarrollo local, usa el backend de Railway o localhost
-const API_URL = import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD
-    ? 'https://alexcel-backend-production.up.railway.app'  // PRODUCCIÓN
-    : `http://${window.location.hostname}:8000`);  // DESARROLLO LOCAL (Dinámico para LAN)
+// En producción forzamos la URL de Railway para evitar errores de configuración en Vercel
+const API_URL = import.meta.env.PROD
+  ? 'https://alexcel-backend-production.up.railway.app'
+  : (import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`);
 
 interface CheckoutPageProps {
   setView: (view: AppView) => void;
