@@ -38,7 +38,7 @@ PRODUCT_FILES = {
 # Configuración del remitente
 # PRODUCCIÓN: Cuando tengas dominio verificado, cambiar a tu email
 EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Datos con Alex")
-EMAIL_FROM_ADDRESS = os.getenv("DEFAULT_FROM_EMAIL", "facundososa98@hotmail.com")
+EMAIL_FROM_ADDRESS = os.getenv("DEFAULT_FROM_EMAIL", "onboarding@resend.dev")
 EMAIL_REPLY_TO = os.getenv("EMAIL_REPLY_TO", "datos.conalex@gmail.com")
 
 
@@ -94,207 +94,78 @@ def validate_product_files(product_id: str) -> dict:
 
 def send_product_email(order) -> bool:
     """
-    Envía el email con el/los producto(s) adjunto(s) usando Resend SDK.
-    
-    Args:
-        order: Objeto con atributos:
-            - email: Email del destinatario
-            - first_name: Nombre del cliente
-            - course_id: ID del producto
-            - course_title: Título del producto
-            - id: ID de la orden (para referencia)
-        
-    Returns:
-        bool: True si el envío fue exitoso
-        
-    Raises:
-        No lanza excepciones; los errores se logean y retorna False
+    Envía el email con el/los producto(s) adjunto(s) usando EXCLUSIVAMENTE RESEND.
     """
     try:
-        # =========================================
-        # 1. VALIDAR CONFIGURACIÓN
-        # =========================================
+        # 1. Validar API Key
         resend.api_key = os.getenv("RESEND_API_KEY")
-        
         if not resend.api_key:
-            logger.error("[EMAIL] CRÍTICO: Falta RESEND_API_KEY en variables de entorno")
+            logger.critical("[EMAIL] CRÍTICO: Falta RESEND_API_KEY")
             return False
-        
-        if not order.email:
-            logger.error("[EMAIL] CRÍTICO: No hay email de destinatario")
-            return False
-            
-        # =========================================
-        # 2. OBTENER ARCHIVOS DEL PRODUCTO
-        # =========================================
+
+        # 2. Obtener archivos
         file_paths = get_product_files(order.course_id)
         
-        logger.info(f"[EMAIL] Preparando envío - Producto: {order.course_id}, Archivos: {len(file_paths)}")
-        
-        # =========================================
-        # 3. PREPARAR ADJUNTOS
-        # =========================================
+        # 3. Preparar adjuntos
         attachments = []
-        files_attached = []
-        
         for file_path in file_paths:
-            if not os.path.exists(file_path):
-                logger.error(f"[EMAIL] Archivo NO encontrado: {file_path}")
-                continue
-                
-            try:
-                file_size = os.path.getsize(file_path)
-                
-                with open(file_path, "rb") as f:
-                    # Resend requiere el contenido como lista de bytes
-                    attachment_content = list(f.read())
-                
-                filename = os.path.basename(file_path)
-                attachments.append({
-                    "filename": filename,
-                    "content": attachment_content
-                })
-                files_attached.append(filename)
-                
-                logger.info(f"[EMAIL] ✓ Archivo adjuntado: {filename} ({file_size/1024:.1f} KB)")
-                
-            except Exception as e:
-                logger.error(f"[EMAIL] Error leyendo archivo {file_path}: {e}")
-        
-        # Verificar que tengamos al menos un archivo (REQ: Fail hard)
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "rb") as f:
+                        attachments.append({
+                            "filename": os.path.basename(file_path),
+                            "content": list(f.read())
+                        })
+                    logger.info(f"[EMAIL] Adjuntado: {os.path.basename(file_path)}")
+                except Exception as e:
+                    logger.error(f"[EMAIL] Error leyendo {file_path}: {e}")
+            else:
+                logger.error(f"[EMAIL] Archivo NO encontrado en disco: {file_path}")
+
+        # SAFETY CHECK: Si no hay archivos, NO enviamos email vacío
         if not attachments:
-            msg = f"[EMAIL] CRÍTICO: No hay archivos válidos para adjuntar (Prod: {order.course_id}). Abortando envío."
-            logger.critical(msg)
+            logger.critical(f"[EMAIL ABORTED] No se encontraron archivos para {order.course_id}. Verifica backend/files/")
             return False
+
+        # 4. Configurar Remitente
+        # Si NO tenés dominio verificado, usá "onboarding@resend.dev"
+        from_email = os.getenv("DEFAULT_FROM_EMAIL", "onboarding@resend.dev")
         
-        # =========================================
-        # 4. CONSTRUIR EMAIL HTML
-        # =========================================
-        archivo_texto = "los archivos adjuntos" if len(attachments) > 1 else "el archivo adjunto"
-        lista_archivos = ", ".join(files_attached)
-        
+        # 5. Construir HTML
         html_content = f"""
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tu compra - Datos con Alex</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-    <table role="presentation" style="width: 100%; border: 0; border-spacing: 0; background-color: #0a0a0a;">
-        <tr>
-            <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" style="max-width: 600px; width: 100%; border: 0; border-spacing: 0; background-color: #1a1a1a; border-radius: 16px; overflow: hidden;">
-                    
-                    <!-- Header -->
-                    <tr>
-                        <td style="padding: 40px 40px 20px; background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); text-align: center;">
-                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">
-                                🎉 ¡Gracias por tu compra!
-                            </h1>
-                        </td>
-                    </tr>
-                    
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 40px;">
-                            <p style="margin: 0 0 20px; color: #ffffff; font-size: 18px; line-height: 1.6;">
-                                Hola <strong style="color: #22c55e;">{order.first_name}</strong>,
-                            </p>
-                            
-                            <p style="margin: 0 0 20px; color: #d1d5db; font-size: 16px; line-height: 1.6;">
-                                Tu pago por <strong style="color: #ffffff;">{order.course_title}</strong> ha sido confirmado exitosamente.
-                            </p>
-                            
-                            <div style="background-color: #262626; border-radius: 12px; padding: 20px; margin: 30px 0; border-left: 4px solid #22c55e;">
-                                <p style="margin: 0 0 10px; color: #22c55e; font-size: 14px; font-weight: 600; text-transform: uppercase;">
-                                    📎 Tu descarga
-                                </p>
-                                <p style="margin: 0; color: #ffffff; font-size: 16px;">
-                                    Adjunto a este correo encontrarás {archivo_texto}:
-                                </p>
-                                <p style="margin: 10px 0 0; color: #9ca3af; font-size: 14px; font-family: monospace;">
-                                    {lista_archivos}
-                                </p>
-                            </div>
-                            
-                            <p style="margin: 0 0 20px; color: #d1d5db; font-size: 16px; line-height: 1.6;">
-                                Los archivos son compatibles con <strong>Microsoft Excel</strong> y <strong>Google Sheets</strong>.
-                            </p>
-                            
-                            <p style="margin: 30px 0 0; color: #9ca3af; font-size: 14px; line-height: 1.6;">
-                                ¿Tenés alguna duda? Respondé a este email y te ayudamos. 💪
-                            </p>
-                        </td>
-                    </tr>
-                    
-                    <!-- Footer -->
-                    <tr>
-                        <td style="padding: 30px 40px; background-color: #262626; text-align: center;">
-                            <p style="margin: 0 0 15px; color: #9ca3af; font-size: 14px;">
-                                Seguinos para más tips de Excel y productividad:
-                            </p>
-                            <div>
-                                <a href="https://www.tiktok.com/@datos.conalex" style="display: inline-block; margin: 0 10px; color: #22c55e; text-decoration: none; font-size: 14px;">TikTok</a>
-                                <span style="color: #4b5563;">•</span>
-                                <a href="https://www.instagram.com/datos_conalex" style="display: inline-block; margin: 0 10px; color: #22c55e; text-decoration: none; font-size: 14px;">Instagram</a>
-                            </div>
-                            <p style="margin: 20px 0 0; color: #6b7280; font-size: 12px;">
-                                Orden #{order.id} | Datos con Alex © 2024
-                            </p>
-                        </td>
-                    </tr>
-                    
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>
-"""
+        <!DOCTYPE html>
+        <html>
+        <body style="font-family: sans-serif; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h1 style="color: #22c55e;">¡Gracias por tu compra!</h1>
+                <p>Hola <strong>{order.first_name}</strong>,</p>
+                <p>Tu pedido <strong>{order.course_title}</strong> está confirmado.</p>
+                <p style="background: #f3f4f6; padding: 15px; border-radius: 8px;">
+                    📎 <strong>Tus archivos están adjuntos a este correo.</strong>
+                </p>
+                <p>Cualquier duda, respondé a este email.</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        # 6. ENVIAR (Core Logic)
+        params = {
+            "from": f"Datos con Alex <{from_email}>",
+            "to": [order.email],
+            "subject": f"🎉 Tu compra: {order.course_title}",
+            "html": html_content,
+            "attachments": attachments,
+            "reply_to": "datos.conalex@gmail.com"
+        }
+
+        r = resend.Emails.send(params)
+        logger.info(f"[EMAIL SUCCESS] Enviado a {order.email}. ID: {r.get('id')}")
+        return True
 
     except Exception as e:
-        logger.exception(f"[EMAIL] Error inesperado enviando email: {str(e)}")
+        logger.exception(f"[EMAIL FAILED] Error crítico enviando con Resend: {str(e)}")
         return False
-
-        # =========================================
-        # 5. ENVIAR CON DJANGO SMTP (GMAIL)
-        # =========================================
-        from django.core.mail import EmailMessage
-        
-        try:
-            logger.info(f"[EMAIL] Iniciando envío SMTP a {order.email}...")
-            
-            email = EmailMessage(
-                subject=f"🎉 Tu compra: {order.course_title} - Datos con Alex",
-                body=html_content,
-                from_email=f"{EMAIL_FROM_NAME} <{EMAIL_FROM_ADDRESS}>",
-                to=[order.email],
-                reply_to=[EMAIL_REPLY_TO],
-            )
-            
-            # Configurar como HTML
-            email.content_subtype = "html"
-            
-            # Agregar adjuntos
-            for file_path in file_paths:
-                if os.path.exists(file_path):
-                    email.attach_file(file_path)
-            
-            # Enviar
-            sent_count = email.send(fail_silently=False)
-            
-            if sent_count > 0:
-                logger.info(f"[EMAIL] ✓ ÉXITO - SMTP | To: {order.email} | Adjuntos: {len(file_paths)}")
-                return True
-            else:
-                logger.error("[EMAIL] El servidor SMTP no envió el correo (count=0)")
-                return False
-                
-        except Exception as e:
-            logger.exception(f"[EMAIL] Error SMTP enviando email: {str(e)}")
-            return False
 
 
 # =============================================================================
