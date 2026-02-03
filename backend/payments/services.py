@@ -94,44 +94,16 @@ def validate_product_files(product_id: str) -> dict:
 
 def send_product_email(order) -> bool:
     """
-    Envía el email con el/los producto(s) adjunto(s) usando EXCLUSIVAMENTE RESEND.
+    Envía el email con el/los producto(s) adjunto(s) usando Django EmailBackend (Gmail SMTP).
     """
     try:
-        # 1. Validar API Key
-        resend.api_key = os.getenv("RESEND_API_KEY")
-        if not resend.api_key:
-            logger.critical("[EMAIL] CRÍTICO: Falta RESEND_API_KEY")
-            return False
-
-        # 2. Obtener archivos
+        # 1. Obtener archivos
         file_paths = get_product_files(order.course_id)
         
-        # 3. Preparar adjuntos
-        attachments = []
-        for file_path in file_paths:
-            if os.path.exists(file_path):
-                try:
-                    with open(file_path, "rb") as f:
-                        attachments.append({
-                            "filename": os.path.basename(file_path),
-                            "content": list(f.read())
-                        })
-                    logger.info(f"[EMAIL] Adjuntado: {os.path.basename(file_path)}")
-                except Exception as e:
-                    logger.error(f"[EMAIL] Error leyendo {file_path}: {e}")
-            else:
-                logger.error(f"[EMAIL] Archivo NO encontrado en disco: {file_path}")
-
-        # SAFETY CHECK: Si no hay archivos, NO enviamos email vacío
-        if not attachments:
-            logger.critical(f"[EMAIL ABORTED] No se encontraron archivos para {order.course_id}. Verifica backend/files/")
-            return False
-
-        # 4. Configurar Remitente
-        # Si NO tenés dominio verificado, usá "onboarding@resend.dev"
-        from_email = os.getenv("DEFAULT_FROM_EMAIL", "onboarding@resend.dev")
+        # 2. Configurar email
+        from django.core.mail import EmailMessage
         
-        # 5. Construir HTML
+        # 3. Construir HTML
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -149,22 +121,37 @@ def send_product_email(order) -> bool:
         </html>
         """
 
-        # 6. ENVIAR (Core Logic)
-        params = {
-            "from": f"Datos con Alex <{from_email}>",
-            "to": [order.email],
-            "subject": f"🎉 Tu compra: {order.course_title}",
-            "html": html_content,
-            "attachments": attachments,
-            "reply_to": "datos.conalex@gmail.com"
-        }
+        # 4. Crear objeto EmailMessage
+        email = EmailMessage(
+            subject=f"🎉 Tu compra: {order.course_title}",
+            body=html_content,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[order.email],
+            reply_to=[settings.EMAIL_HOST_USER]  # Responder al Gmail
+        )
+        email.content_subtype = "html"  # Main content is now text/html
 
-        r = resend.Emails.send(params)
-        logger.info(f"[EMAIL SUCCESS] Enviado a {order.email}. ID: {r.get('id')}")
+        # 5. Adjuntar archivos
+        attachments_count = 0
+        for file_path in file_paths:
+            if os.path.exists(file_path):
+                email.attach_file(file_path)
+                attachments_count += 1
+                logger.info(f"[EMAIL] Adjuntando: {os.path.basename(file_path)}")
+            else:
+                logger.error(f"[EMAIL] Archivo NO encontrado: {file_path}")
+
+        if attachments_count == 0:
+             logger.critical(f"[EMAIL ABORTED] No hay archivos para enviar.")
+             return False
+
+        # 6. ENVIAR
+        email.send()
+        logger.info(f"[EMAIL SUCCESS] Enviado a {order.email} vía Gmail SMTP")
         return True
 
     except Exception as e:
-        logger.exception(f"[EMAIL FAILED] Error crítico enviando con Resend: {str(e)}")
+        logger.exception(f"[EMAIL FAILED] Error enviando con Gmail: {str(e)}")
         return False
 
 

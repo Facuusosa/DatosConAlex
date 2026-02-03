@@ -32,7 +32,7 @@
 | `MP_ACCESS_TOKEN` | `APP_USR-xxxx...` | **CRÍTICO**: Debe empezar con `APP_USR-` (no `TEST-`) |
 | `RESEND_API_KEY` | `re_xxxx...` | API Key de Resend para envío de emails |
 | `DEFAULT_FROM_EMAIL` | `onboarding@resend.dev` | Remitente (cambiar cuando tengas dominio verificado) |
-| `FRONTEND_URL` | `https://alexcel-three.vercel.app` | URL de tu frontend en Vercel |
+| `FRONTEND_URL` | `https://datos-con-alex.vercel.app` | URL de tu frontend en Vercel |
 | `DEBUG` | `False` | Desactivar en producción |
 | `DJANGO_ALLOWED_HOSTS` | `alexcel-backend-production.up.railway.app` | Host permitido |
 | `SECRET_KEY` | `<random-string>` | Clave secreta de Django |
@@ -43,7 +43,7 @@
 |----------|------------------|-------------|
 | `VITE_API_URL` | `https://alexcel-backend-production.up.railway.app` | URL del backend en Railway |
 
-> ⚠️ **NOTA IMPORTANTE**: El frontend tiene hardcodeado como fallback la URL de Railway en `CheckoutPage.tsx` línea 24-26. Esto es intencional para evitar errores de configuración.
+> ⚠️ **NOTA IMPORTANTE**: El frontend tiene hardcodeado como fallback la URL de Railway en `CheckoutPage.tsx`. Esto es intencional para evitar errores de configuración.
 
 ---
 
@@ -120,7 +120,7 @@ PRODUCT_FILES = {
 
 ## 🧪 TEST DE PRODUCCIÓN
 
-1. Abrir `https://alexcel-three.vercel.app/planilla/tracker-habitos`
+1. Abrir `https://datos-con-alex.vercel.app/planilla/tracker-habitos`
 2. Click "Comprar Ahora"
 3. Llenar formulario con email REAL
 4. Pagar $1 con tarjeta real
