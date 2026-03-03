@@ -30,7 +30,7 @@ def health_check(request) -> JsonResponse:
     return JsonResponse({
         "status": "ok",
         "message": "Backend running - Datos con Alex",
-        "email_service": "Gmail SMTP",
+        "email_service": "Brevo SMTP",
         "production_mode": is_production,
         "token_type": "production" if is_production else "sandbox/test"
     })
@@ -58,8 +58,8 @@ def env_check(request) -> JsonResponse:
             "token_prefix": mp_token[:15] + "..." if len(mp_token) > 15 else "Too short",
             "is_production": mp_token.startswith('APP_USR-'),
         },
-        "email_gmail": {
-            "host": os.environ.get('EMAIL_HOST', 'smtp.gmail.com'),
+        "email_brevo": {
+            "host": os.environ.get('EMAIL_HOST', 'smtp-relay.brevo.com'),
             "port": os.environ.get('EMAIL_PORT', '587'),
             "user_configured": bool(email_user),
             "user_preview": email_user[:5] + "***" if len(email_user) > 5 else "Not Set",
@@ -85,10 +85,10 @@ def products_check(request) -> JsonResponse:
 
 def test_email(request) -> JsonResponse:
     """
-    Prueba de envío de email con Gmail SMTP.
+    Prueba de envío de email con Brevo SMTP.
     GET /api/payments/test-email/?to=tu@email.com
     
-    NOTA: Requiere EMAIL_HOST_USER y EMAIL_HOST_PASSWORD configurados.
+    NOTA: Requiere EMAIL_HOST, EMAIL_HOST_USER y EMAIL_HOST_PASSWORD configurados.
     """
     destinatario = request.GET.get('to')
     if not destinatario:
@@ -113,7 +113,7 @@ def test_email(request) -> JsonResponse:
                 <div style="font-family: sans-serif; padding: 20px; background: #1a1a1a; color: white; border-radius: 10px;">
                     <h2 style="color: #22c55e;">✅ Email de Prueba Exitoso</h2>
                     <p>Si estás leyendo esto, el sistema de emails funciona correctamente.</p>
-                    <p style="color: #888; font-size: 12px;">Enviado desde el backend de Datos con Alex vía Gmail SMTP</p>
+                    <p style="color: #888; font-size: 12px;">Enviado desde el backend de Datos con Alex vía Brevo SMTP</p>
                 </div>
             """,
             from_email=settings.DEFAULT_FROM_EMAIL,
@@ -126,7 +126,7 @@ def test_email(request) -> JsonResponse:
         return JsonResponse({
             "status": "ok",
             "message": f"✅ Email de prueba enviado a {destinatario}",
-            "service": "Gmail SMTP",
+            "service": "Brevo SMTP",
             "from": settings.DEFAULT_FROM_EMAIL
         })
         
@@ -161,8 +161,8 @@ def system_status(request) -> JsonResponse:
     # Calcular status general
     checks = {
         "mp_token_production": mp_token.startswith('APP_USR-'),
-        "gmail_user_configured": bool(email_user),
-        "gmail_password_configured": bool(email_pass),
+        "brevo_user_configured": bool(email_user),
+        "brevo_password_configured": bool(email_pass),
         "frontend_url_set": bool(frontend_url),
         "all_products_ready": all_products_ready,
         "debug_off": os.environ.get('DEBUG', 'True').lower() != 'true',
