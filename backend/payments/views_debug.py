@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.mail import EmailMessage
 import os
 import logging
+from types import SimpleNamespace
 from typing import Any
 
 from .services import test_email_connection, list_available_products, validate_product_files
@@ -107,28 +108,33 @@ def test_email(request) -> JsonResponse:
         }, status=500)
     
     try:
-        email = EmailMessage(
-            subject="🧪 Prueba de Email - Datos con Alex",
-            body="""
-                <div style="font-family: sans-serif; padding: 20px; background: #1a1a1a; color: white; border-radius: 10px;">
-                    <h2 style="color: #22c55e;">✅ Email de Prueba Exitoso</h2>
-                    <p>Si estás leyendo esto, el sistema de emails funciona correctamente.</p>
-                    <p style="color: #888; font-size: 12px;">Enviado desde el backend de Datos con Alex vía Brevo SMTP</p>
-                </div>
-            """,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[destinatario],
-            reply_to=[settings.EMAIL_HOST_USER] if settings.EMAIL_HOST_USER else None
-        )
-        email.content_subtype = "html"
-        email.send(fail_silently=False)
+        # Usar el servicio real para probar el envío vía API
+        class FakeOrder:
+            def __init__(self, email, first_name):
+                self.email = email
+                self.first_name = first_name
+                self.course_id = 'tracker-habitos'
+                self.course_title = '🧪 Prueba de Email (Brevo API)'
+
+        order = FakeOrder(destinatario, "Tester")
         
-        return JsonResponse({
-            "status": "ok",
-            "message": f"✅ Email de prueba enviado a {destinatario}",
-            "service": "Brevo SMTP",
-            "from": settings.DEFAULT_FROM_EMAIL
-        })
+        logger.info(f"[TEST] Enviando email de prueba a {destinatario} vía API...")
+        from .services import send_product_email
+        success = send_product_email(order)
+        
+        if success:
+            return JsonResponse({
+                "status": "ok",
+                "message": f"✅ Email de prueba enviado a {destinatario} vía API de Brevo",
+                "service": "Brevo API (HTTPS)",
+                "from": settings.DEFAULT_FROM_EMAIL
+            })
+        else:
+            return JsonResponse({
+                "status": "error",
+                "message": "Fallo el envío vía API. Revisar logs del servidor.",
+                "details": email_check
+            }, status=500)
         
     except Exception as e:
         logger.exception("Error en test_email")
@@ -172,7 +178,7 @@ def system_status(request) -> JsonResponse:
     
     return JsonResponse({
         "ready_for_production": all_ok,
-        "email_service": "Gmail SMTP",
+        "email_service": "Brevo API (HTTPS)",
         "checks": checks,
         "products": products,
         "recommendation": "🚀 Sistema listo para producción" if all_ok else "⚠️ Revisar checks fallidos"
