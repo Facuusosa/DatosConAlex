@@ -247,40 +247,38 @@ def create_preference(request):
 def pago_exitoso(request):
     """
     Valida el pago consultando a MP y envía el email.
-    
-    Este endpoint se llama cuando:
-    1. MP redirige al usuario después de pagar
-    2. El frontend llama para validar y disparar el envío de email
-    
-    Query Params (enviados por MP):
-    - payment_id o collection_id
-    - status
-    - external_reference
-    
-    IMPORTANTE: Este es el método PRIMARIO de entrega.
-    El webhook es backup.
+    MÉTODO PRIMARIO de entrega. El webhook es backup.
     """
+    print("=" * 80)
+    print("[VALIDATE] ========== INICIO pago_exitoso ==========")
+    print(f"[VALIDATE] Query params: {dict(request.GET)}")
+    logger.info(f"[VALIDATE] ========== INICIO pago_exitoso ==========")
+    
     try:
         # Obtener payment_id de los parámetros
         payment_id = request.GET.get('payment_id') or request.GET.get('collection_id')
         
         if not payment_id:
+            print("[VALIDATE] ❌ ERROR: No hay payment_id en los parámetros")
             logger.warning("[VALIDATE] Llamada sin payment_id")
             return JsonResponse({
                 'success': False, 
                 'error': 'Falta payment_id en la URL'
             }, status=400)
         
-        log_payment_event("VALIDATE_START", payment_id, {
-            "source": "pago_exitoso",
-            "params": dict(request.GET)
-        })
+        print(f"[VALIDATE] ✅ payment_id recibido: {payment_id}")
+        logger.info(f"[VALIDATE] payment_id: {payment_id}")
         
         # Consultar a Mercado Pago para obtener datos REALES del pago
+        print(f"[VALIDATE] Consultando MP API para payment {payment_id}...")
         try:
             payment_response = sdk.payment().get(payment_id)
+            mp_http_status = payment_response.get("status")
+            print(f"[VALIDATE] MP API respondió HTTP status: {mp_http_status}")
             
-            if payment_response.get("status") != 200:
+            if mp_http_status != 200:
+                print(f"[VALIDATE] ❌ ERROR: MP devolvió status {mp_http_status}")
+                print(f"[VALIDATE] Respuesta completa de MP: {json.dumps(payment_response, default=str)[:500]}")
                 logger.error(f"[MP_ERROR] get payment {payment_id}: {payment_response}")
                 return JsonResponse({
                     'success': False, 
@@ -289,17 +287,22 @@ def pago_exitoso(request):
             
             payment_data = payment_response.get("response", {})
             status = payment_data.get("status")
+            status_detail = payment_data.get("status_detail", "N/A")
+            amount = payment_data.get("transaction_amount")
             
             # Extraer metadata (MP convierte keys a snake_case)
             metadata = payment_data.get("metadata", {})
             
-            log_payment_event("PAYMENT_DATA_RETRIEVED", payment_id, {
-                "status": status,
-                "amount": payment_data.get("transaction_amount"),
-                "metadata_keys": list(metadata.keys())
-            })
+            print(f"[VALIDATE] ✅ Datos del pago obtenidos de MP:")
+            print(f"[VALIDATE]    status         = {status}")
+            print(f"[VALIDATE]    status_detail  = {status_detail}")
+            print(f"[VALIDATE]    amount         = {amount}")
+            print(f"[VALIDATE]    metadata keys  = {list(metadata.keys())}")
+            print(f"[VALIDATE]    metadata       = {json.dumps(metadata, default=str)}")
+            logger.info(f"[VALIDATE] Payment {payment_id}: status={status}, amount={amount}, metadata_keys={list(metadata.keys())}")
             
         except Exception as e:
+            print(f"[VALIDATE] ❌ EXCEPCIÓN consultando MP: {type(e).__name__}: {e}")
             logger.exception(f"[CRITICAL] Error recuperando pago {payment_id}")
             return JsonResponse({
                 'success': False, 
@@ -308,8 +311,11 @@ def pago_exitoso(request):
 
         # Solo procesamos pagos APROBADOS
         if status == 'approved':
+            print(f"[VALIDATE] ✅ Pago APROBADO - procesando envío de email...")
+            
             # Verificar si ya procesamos este pago (evitar doble envío)
             if payment_id in _processed_payments:
+                print(f"[VALIDATE] ⚠️ Payment {payment_id} YA FUE PROCESADO anteriormente (skip)")
                 logger.info(f"[SKIP] Payment {payment_id} ya fue procesado")
                 return JsonResponse({
                     'success': True,
@@ -321,9 +327,20 @@ def pago_exitoso(request):
             
             # Construir objeto order para el servicio de email
             customer_email = metadata.get("customer_email", "")
+            customer_name = metadata.get("customer_first_name", "Cliente")
+            course_id = metadata.get("course_id", "tracker-habitos")
+            course_title = metadata.get("course_title", "Producto Digital")
+            
+            print(f"[VALIDATE] Datos del cliente extraídos de metadata:")
+            print(f"[VALIDATE]    customer_email = '{customer_email}'")
+            print(f"[VALIDATE]    customer_name  = '{customer_name}'")
+            print(f"[VALIDATE]    course_id      = '{course_id}'")
+            print(f"[VALIDATE]    course_title   = '{course_title}'")
             
             # Validar que tenemos email del cliente
             if not customer_email:
+                print(f"[VALIDATE] ❌ ERROR: No hay customer_email en metadata!")
+                print(f"[VALIDATE]    Metadata completa: {json.dumps(metadata, default=str)}")
                 logger.error(f"[ERROR] No hay email en metadata para payment {payment_id}")
                 return JsonResponse({
                     'success': True,
@@ -336,11 +353,11 @@ def pago_exitoso(request):
             
             fake_order = SimpleNamespace(
                 id=payment_data.get("external_reference", payment_id),
-                first_name=metadata.get("customer_first_name", "Cliente"),
+                first_name=customer_name,
                 email=customer_email,
-                course_title=metadata.get("course_title", "Producto Digital"),
-                course_id=metadata.get("course_id", "tracker-habitos"),
-                price=metadata.get("price", payment_data.get("transaction_amount", 0)),
+                course_title=course_title,
+                course_id=course_id,
+                price=metadata.get("price", amount or 0),
                 status=status
             )
             
@@ -349,26 +366,31 @@ def pago_exitoso(request):
             email_error = None
             
             try:
+                print(f"[VALIDATE] 📧 Llamando a send_product_email()...")
+                print(f"[VALIDATE]    → to: {fake_order.email}")
+                print(f"[VALIDATE]    → product: {fake_order.course_id}")
+                print(f"[VALIDATE]    → name: {fake_order.first_name}")
                 logger.info(f"[EMAIL] Enviando a {fake_order.email} - Producto: {fake_order.course_id}")
+                
                 email_sent = send_product_email(fake_order)
+                
+                print(f"[VALIDATE] 📧 send_product_email() retornó: {email_sent}")
                 
                 if email_sent:
                     _processed_payments.add(payment_id)
-                    log_payment_event("EMAIL_SENT_SUCCESS", payment_id, {
-                        "to": fake_order.email,
-                        "product": fake_order.course_id
-                    })
+                    print(f"[VALIDATE] ✅ EMAIL ENVIADO EXITOSAMENTE")
+                    logger.info(f"[EMAIL_SENT_SUCCESS] Payment {payment_id} → {fake_order.email}")
                 else:
-                    log_payment_event("EMAIL_SENT_FAILED", payment_id, {
-                        "to": fake_order.email
-                    })
+                    print(f"[VALIDATE] ❌ send_product_email retornó False - EMAIL NO ENVIADO")
+                    logger.error(f"[EMAIL_SENT_FAILED] Payment {payment_id} → {fake_order.email}")
                     
             except Exception as email_ex:
                 email_error = str(email_ex)
+                print(f"[VALIDATE] ❌ EXCEPCIÓN en send_product_email: {type(email_ex).__name__}: {email_error}")
                 logger.error(f"[CRITICAL] Email error for {payment_id}: {email_error}")
-                log_payment_event("EMAIL_EXCEPTION", payment_id, {
-                    "error": email_error
-                })
+            
+            print(f"[VALIDATE] ========== FIN pago_exitoso (email_sent={email_sent}) ==========")
+            print("=" * 80)
             
             return JsonResponse({
                 'success': True,
@@ -376,12 +398,13 @@ def pago_exitoso(request):
                 'payment_id': payment_id,
                 'email_sent': email_sent,
                 'email_error': email_error,
-                'customer_email': customer_email[:3] + "***",  # Mostrar parcialmente por privacidad
+                'customer_email': customer_email[:3] + "***",
                 'message': '¡Pago exitoso! Revisá tu email (y la carpeta de spam).' if email_sent 
                           else '¡Pago exitoso! Hubo un problema enviando el email, contactanos a datos.conalex@gmail.com'
             })
         
         elif status == 'pending':
+            print(f"[VALIDATE] ⏳ Pago PENDIENTE - no se envía email")
             return JsonResponse({
                 'success': False,
                 'status': 'pending',
@@ -389,6 +412,7 @@ def pago_exitoso(request):
             })
         
         elif status == 'in_process':
+            print(f"[VALIDATE] ⏳ Pago EN PROCESO - no se envía email")
             return JsonResponse({
                 'success': False,
                 'status': 'in_process',
@@ -396,6 +420,7 @@ def pago_exitoso(request):
             })
         
         else:
+            print(f"[VALIDATE] ❌ Pago NO aprobado. Status: {status}")
             return JsonResponse({
                 'success': False, 
                 'status': status,
@@ -403,6 +428,7 @@ def pago_exitoso(request):
             })
 
     except Exception as e:
+        print(f"[VALIDATE] ❌ EXCEPCIÓN GENERAL: {type(e).__name__}: {e}")
         logger.exception("[CRITICAL] Error en pago_exitoso")
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
@@ -432,92 +458,125 @@ def download_file(request, order_id):
 def webhook(request):
     """
     Webhook de Mercado Pago - FUENTE DE VERDAD para notificaciones.
-    
-    Este endpoint actúa como BACKUP cuando:
-    1. El usuario cierra la ventana antes de pago_exitoso
-    2. Hay un error en el frontend
-    3. El pago se aprueba después (ej: transferencia bancaria)
-    
-    MP envía notificaciones cuando:
-    - Se crea un pago
-    - Se actualiza el estado de un pago
-    - Se realiza una devolución
-    
-    IMPORTANTE: Siempre responder 200 OK para que MP no reintente.
+    Backup cuando pago_exitoso no se ejecuta.
+    SIEMPRE responde 200 OK para que MP no reintente.
     """
     # GET request = MP verificando que el webhook existe
     if request.method == 'GET':
         return JsonResponse({'status': 'webhook active', 'production': is_production_token()})
     
+    print("=" * 80)
+    print("[WEBHOOK] ========== NOTIFICACIÓN RECIBIDA ==========")
+    logger.info("[WEBHOOK] ========== NOTIFICACIÓN RECIBIDA ==========")
+    
     try:
-        # Parsear body del webhook
+        # 1. PARSEAR BODY
+        raw_body = request.body.decode('utf-8', errors='replace') if request.body else '{}'
+        print(f"[WEBHOOK] PASO 1 - Raw body recibido: {raw_body[:1000]}")
+        logger.info(f"[WEBHOOK] Raw body: {raw_body[:500]}")
+        
         try:
             body = json.loads(request.body) if request.body else {}
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as jde:
+            print(f"[WEBHOOK] ❌ ERROR parseando JSON: {jde}")
             body = {}
         
-        # Log del webhook recibido
+        # 2. IDENTIFICAR TIPO DE NOTIFICACIÓN
         notification_type = body.get('type', 'unknown')
         action = body.get('action', 'unknown')
         
-        log_payment_event("WEBHOOK_RECEIVED", "N/A", {
-            "type": notification_type,
-            "action": action,
-            "body_keys": list(body.keys())
-        })
+        print(f"[WEBHOOK] PASO 2 - Tipo de notificación:")
+        print(f"[WEBHOOK]    type   = '{notification_type}'")
+        print(f"[WEBHOOK]    action = '{action}'")
+        print(f"[WEBHOOK]    keys   = {list(body.keys())}")
+        logger.info(f"[WEBHOOK] type={notification_type}, action={action}")
         
         # Solo procesamos notificaciones de pago
         if notification_type != 'payment':
+            print(f"[WEBHOOK] ⚠️ Ignorando - no es tipo 'payment' (es '{notification_type}')")
             logger.info(f"[WEBHOOK] Ignorando notificación tipo: {notification_type}")
             return JsonResponse({'status': 'ignored', 'reason': 'not a payment notification'})
         
-        # Obtener el ID del pago
+        # 3. EXTRAER PAYMENT_ID
         data = body.get('data', {})
         payment_id = data.get('id') or body.get('data.id')
         
+        print(f"[WEBHOOK] PASO 3 - Extracción de payment_id:")
+        print(f"[WEBHOOK]    body['data']      = {data}")
+        print(f"[WEBHOOK]    payment_id        = {payment_id}")
+        
         if not payment_id:
+            print("[WEBHOOK] ❌ ERROR: No se pudo extraer payment_id")
             logger.warning("[WEBHOOK] No payment_id en la notificación")
             return JsonResponse({'status': 'ignored', 'reason': 'no payment_id'})
         
         payment_id = str(payment_id)
+        print(f"[WEBHOOK] ✅ payment_id: {payment_id}")
         
-        # Verificar si ya procesamos este pago
+        # 4. CHECK DUPLICADOS
         if payment_id in _processed_payments:
+            print(f"[WEBHOOK] ⚠️ Payment {payment_id} YA PROCESADO (en caché). Skip.")
             logger.info(f"[WEBHOOK] Payment {payment_id} ya procesado, skipping")
             return JsonResponse({'status': 'already_processed'})
         
-        log_payment_event("WEBHOOK_PROCESSING", payment_id, {"action": action})
+        print(f"[WEBHOOK] PASO 4 - Payment {payment_id} NO está en caché. Procesando...")
         
-        # Consultar detalles del pago a MP
+        # 5. CONSULTAR DETALLES DEL PAGO A MP
+        print(f"[WEBHOOK] PASO 5 - Consultando MP API sdk.payment().get({payment_id})...")
         try:
             payment_response = sdk.payment().get(payment_id)
+            mp_http_status = payment_response.get("status")
             
-            if payment_response.get("status") != 200:
+            print(f"[WEBHOOK]    MP API HTTP status: {mp_http_status}")
+            
+            if mp_http_status != 200:
+                print(f"[WEBHOOK] ❌ ERROR: MP devolvió HTTP {mp_http_status}")
+                print(f"[WEBHOOK]    Respuesta: {json.dumps(payment_response, default=str)[:500]}")
                 logger.error(f"[WEBHOOK] Error obteniendo pago {payment_id}: {payment_response}")
                 return JsonResponse({'status': 'error', 'reason': 'mp_api_error'}, status=200)
             
             payment_data = payment_response.get("response", {})
             status = payment_data.get("status")
+            status_detail = payment_data.get("status_detail", "N/A")
+            amount = payment_data.get("transaction_amount")
             metadata = payment_data.get("metadata", {})
             
-            log_payment_event("WEBHOOK_PAYMENT_STATUS", payment_id, {
-                "status": status,
-                "amount": payment_data.get("transaction_amount")
-            })
+            print(f"[WEBHOOK] ✅ Datos del pago obtenidos de MP:")
+            print(f"[WEBHOOK]    status         = '{status}'")
+            print(f"[WEBHOOK]    status_detail  = '{status_detail}'")
+            print(f"[WEBHOOK]    amount         = {amount}")
+            print(f"[WEBHOOK]    metadata keys  = {list(metadata.keys())}")
+            print(f"[WEBHOOK]    metadata FULL  = {json.dumps(metadata, default=str)}")
+            logger.info(f"[WEBHOOK] Payment {payment_id}: status={status}, amount={amount}")
             
         except Exception as e:
+            print(f"[WEBHOOK] ❌ EXCEPCIÓN consultando MP: {type(e).__name__}: {e}")
             logger.exception(f"[WEBHOOK] Error consultando MP para {payment_id}")
             return JsonResponse({'status': 'error', 'reason': str(e)}, status=200)
         
-        # Solo procesamos pagos aprobados
+        # 6. VERIFICAR APROBACIÓN
         if status != 'approved':
+            print(f"[WEBHOOK] ⚠️ Pago NO aprobado (status='{status}'). No se envía email.")
             logger.info(f"[WEBHOOK] Payment {payment_id} status={status}, no action needed")
             return JsonResponse({'status': 'noted', 'payment_status': status})
         
-        # Obtener email del cliente
+        print(f"[WEBHOOK] ✅ PASO 6 - Pago APROBADO. Preparando envío de email...")
+        
+        # 7. EXTRAER DATOS DEL CLIENTE DE METADATA
         customer_email = metadata.get("customer_email", "")
+        customer_name = metadata.get("customer_first_name", "Cliente")
+        course_id = metadata.get("course_id", "tracker-habitos")
+        course_title = metadata.get("course_title", "Producto Digital")
+        
+        print(f"[WEBHOOK] PASO 7 - Datos del cliente de metadata:")
+        print(f"[WEBHOOK]    customer_email = '{customer_email}'")
+        print(f"[WEBHOOK]    customer_name  = '{customer_name}'")
+        print(f"[WEBHOOK]    course_id      = '{course_id}'")
+        print(f"[WEBHOOK]    course_title   = '{course_title}'")
         
         if not customer_email:
+            print(f"[WEBHOOK] ❌ ERROR: No hay customer_email en metadata!")
+            print(f"[WEBHOOK]    metadata completa: {json.dumps(metadata, default=str)}")
             logger.error(f"[WEBHOOK] No email en metadata para {payment_id}")
             return JsonResponse({
                 'status': 'error', 
@@ -525,40 +584,51 @@ def webhook(request):
                 'action': 'manual_intervention_required'
             }, status=200)
         
-        # Construir orden para envío de email
+        # 8. CONSTRUIR ORDEN Y ENVIAR EMAIL
         fake_order = SimpleNamespace(
             id=payment_data.get("external_reference", payment_id),
-            first_name=metadata.get("customer_first_name", "Cliente"),
+            first_name=customer_name,
             email=customer_email,
-            course_title=metadata.get("course_title", "Producto Digital"),
-            course_id=metadata.get("course_id", "tracker-habitos"),
-            price=metadata.get("price", payment_data.get("transaction_amount", 0)),
+            course_title=course_title,
+            course_id=course_id,
+            price=metadata.get("price", amount or 0),
             status=status
         )
         
-        # Enviar email
+        print(f"[WEBHOOK] PASO 8 - fake_order construido:")
+        print(f"[WEBHOOK]    id     = {fake_order.id}")
+        print(f"[WEBHOOK]    email  = {fake_order.email}")
+        print(f"[WEBHOOK]    course = {fake_order.course_id}")
+        
         try:
+            print(f"[WEBHOOK] 📧 Llamando a send_product_email()...")
             logger.info(f"[WEBHOOK] Enviando email a {customer_email} para payment {payment_id}")
+            
             email_sent = send_product_email(fake_order)
+            
+            print(f"[WEBHOOK] 📧 send_product_email() retornó: {email_sent}")
             
             if email_sent:
                 _processed_payments.add(payment_id)
-                log_payment_event("WEBHOOK_EMAIL_SUCCESS", payment_id, {
-                    "to": customer_email,
-                    "product": fake_order.course_id
-                })
+                print(f"[WEBHOOK] ✅ ¡EMAIL ENVIADO EXITOSAMENTE!")
+                print(f"[WEBHOOK] ========== FIN WEBHOOK (éxito) ==========")
+                print("=" * 80)
+                logger.info(f"[WEBHOOK_EMAIL_SUCCESS] {payment_id} → {customer_email}")
                 return JsonResponse({'status': 'processed', 'email_sent': True})
             else:
-                log_payment_event("WEBHOOK_EMAIL_FAILED", payment_id, {
-                    "to": customer_email
-                })
+                print(f"[WEBHOOK] ❌ send_product_email retornó False - REVISAR LOGS DE services.py")
+                print(f"[WEBHOOK] ========== FIN WEBHOOK (email falló) ==========")
+                print("=" * 80)
+                logger.error(f"[WEBHOOK_EMAIL_FAILED] {payment_id} → {customer_email}")
                 return JsonResponse({'status': 'processed', 'email_sent': False})
                 
         except Exception as e:
+            print(f"[WEBHOOK] ❌ EXCEPCIÓN en send_product_email: {type(e).__name__}: {e}")
+            import traceback
+            print(f"[WEBHOOK] Traceback:\n{traceback.format_exc()}")
+            print(f"[WEBHOOK] ========== FIN WEBHOOK (excepción) ==========")
+            print("=" * 80)
             logger.exception(f"[WEBHOOK] Error enviando email para {payment_id}")
-            log_payment_event("WEBHOOK_EMAIL_EXCEPTION", payment_id, {
-                "error": str(e)
-            })
             return JsonResponse({
                 'status': 'error', 
                 'reason': 'email_failed',
@@ -566,6 +636,10 @@ def webhook(request):
             }, status=200)
         
     except Exception as e:
+        print(f"[WEBHOOK] ❌ EXCEPCIÓN GENERAL: {type(e).__name__}: {e}")
+        import traceback
+        print(f"[WEBHOOK] Traceback:\n{traceback.format_exc()}")
+        print("=" * 80)
         logger.exception("[CRITICAL] Error general en webhook")
         # SIEMPRE responder 200 para que MP no reintente
         return JsonResponse({'status': 'error', 'reason': str(e)}, status=200)

@@ -42,13 +42,15 @@ PRODUCT_FILES: dict[str, list[str]] = {
 
 def validate_email_config() -> dict[str, Any]:
     errors: list[str] = []
-    api_key = os.environ.get('EMAIL_HOST_PASSWORD', '')
-    from_email = os.environ.get('DEFAULT_FROM_EMAIL', '')
+    api_key = os.environ.get('EMAIL_HOST_PASSWORD', '').strip()
+    from_email = os.environ.get('DEFAULT_FROM_EMAIL', '').strip()
 
     if not api_key:
         errors.append("EMAIL_HOST_PASSWORD (API Key) no está configurado")
     if not from_email:
         errors.append("DEFAULT_FROM_EMAIL no está configurado")
+    elif '\n' in os.environ.get('DEFAULT_FROM_EMAIL', '') or '\r' in os.environ.get('DEFAULT_FROM_EMAIL', ''):
+        logger.warning("[CONFIG] DEFAULT_FROM_EMAIL contenía caracteres ocultos (\\n/\\r), se limpiaron automáticamente")
 
     return {
         "valid": len(errors) == 0,
@@ -89,23 +91,41 @@ def send_product_email(order: Any) -> bool:
     """
     Envía el email usando la API de Brevo (HTTPS).
     """
+    print(f"[SERVICES] ========== send_product_email INICIO ==========")
+    
     config_check = validate_email_config()
     if not config_check["valid"]:
+        print(f"[SERVICES] ❌ CONFIG INVÁLIDA: {config_check['errors']}")
         logger.critical(f"[API ABORTED] Errores: {config_check['errors']}")
         return False
+    
+    print(f"[SERVICES] ✅ Config válida")
 
     try:
         # API Configuration
+        api_key_raw = os.environ.get('EMAIL_HOST_PASSWORD', '')
+        api_key = api_key_raw.strip()
         configuration = sib_api_v3_sdk.Configuration()
-        configuration.api_key['api-key'] = os.environ.get('EMAIL_HOST_PASSWORD')
+        configuration.api_key['api-key'] = api_key
         api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
 
+        print(f"[SERVICES] ✅ API Key: '{api_key[:15]}...' (len={len(api_key)}, raw_len={len(api_key_raw)})")
+
         # Destination Data
-        recipient_email = getattr(order, 'email', '')
+        recipient_email = getattr(order, 'email', '').strip()
         customer_name = getattr(order, 'first_name', 'Cliente')
         product_id = getattr(order, 'course_id', '')
         product_title = getattr(order, 'course_title', 'Producto Digital')
-        from_email = os.environ.get('DEFAULT_FROM_EMAIL')
+        from_email_raw = os.environ.get('DEFAULT_FROM_EMAIL', '')
+        from_email = from_email_raw.strip()
+
+        print(f"[SERVICES] Datos de envío:")
+        print(f"[SERVICES]    to         = '{recipient_email}'")
+        print(f"[SERVICES]    from       = '{from_email}' (raw_repr={repr(from_email_raw)})")
+        print(f"[SERVICES]    product_id = '{product_id}'")
+        print(f"[SERVICES]    title      = '{product_title}'")
+        print(f"[SERVICES]    name       = '{customer_name}'")
+        logger.info(f"[API] Preparando envío: to={recipient_email}, from={from_email}, product={product_id}")
 
         # Content
         html_content = f"""
@@ -127,20 +147,28 @@ def send_product_email(order: Any) -> bool:
         attachments = []
         file_paths = get_product_files(product_id)
         
+        print(f"[SERVICES] Archivos a adjuntar para '{product_id}': {file_paths}")
+        
         for path in file_paths:
             if os.path.exists(path):
+                file_size = os.path.getsize(path)
                 with open(path, "rb") as f:
                     content = base64.b64encode(f.read()).decode('utf-8')
                 attachments.append({
                     "content": content,
                     "name": os.path.basename(path)
                 })
+                print(f"[SERVICES]    ✅ Archivo cargado: {os.path.basename(path)} ({file_size} bytes)")
             else:
+                print(f"[SERVICES]    ❌ Archivo NO EXISTE: {path}")
                 logger.error(f"[API] Archivo no existe: {path}")
 
         if not attachments:
+            print(f"[SERVICES] ❌ ABORTADO: No hay archivos para enviar")
             logger.error("[API ABORTED] No hay archivos para enviar")
             return False
+
+        print(f"[SERVICES] ✅ {len(attachments)} archivo(s) listo(s) para adjuntar")
 
         # Send SMTP Email object
         send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
@@ -151,16 +179,29 @@ def send_product_email(order: Any) -> bool:
             attachment=attachments
         )
 
+        print(f"[SERVICES] 📧 Llamando a Brevo API send_transac_email()...")
+        
         # Execute
         api_response = api_instance.send_transac_email(send_smtp_email)
+        
+        print(f"[SERVICES] ✅ ¡EMAIL ENVIADO! message_id: {api_response.message_id}")
         logger.info(f"[API SUCCESS] Email enviado vía API. ID: {api_response.message_id}")
+        print(f"[SERVICES] ========== send_product_email FIN (éxito) ==========")
         return True
 
     except ApiException as e:
+        print(f"[SERVICES] ❌ BREVO API ERROR: status={e.status}, reason={e.reason}")
+        print(f"[SERVICES]    body: {e.body}")
+        print(f"[SERVICES]    headers: {e.headers}")
         logger.error(f"[API FAILED] Error en Brevo API: {e}")
+        print(f"[SERVICES] ========== send_product_email FIN (API error) ==========")
         return False
     except Exception as e:
+        print(f"[SERVICES] ❌ ERROR INESPERADO: {type(e).__name__}: {e}")
+        import traceback
+        print(f"[SERVICES] Traceback:\n{traceback.format_exc()}")
         logger.exception(f"[API CRITICAL] Error inesperado: {e}")
+        print(f"[SERVICES] ========== send_product_email FIN (excepción) ==========")
         return False
 
 # Mantenemos las otras funciones para compatibilidad con las vistas de debug
